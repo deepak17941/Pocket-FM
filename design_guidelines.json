@@ -1,0 +1,173 @@
+{
+  "theme": "Auto (Light + Dark)",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) + Organic & Earthy (for warmth)",
+  "design_philosophy": "A sophisticated, pocket-FM style offline music player. It rejects the complex, cluttered interfaces of standard streaming giants in favor of clean typography, massive album art presentation, translucent glassmorphism for controls, and a pure monochromatic structural base with one striking accent color. Content is king—every track feels like an art piece.",
+  "colors": {
+    "light": {
+      "background": "#F7F7F5",
+      "surface": "#FFFFFF",
+      "surface_secondary": "#F0F0EE",
+      "surface_tertiary": "#EBEBE8",
+      "primary": "#FF4500",
+      "text_primary": "#0A0A0A",
+      "text_secondary": "#6B6B66",
+      "text_tertiary": "#A3A3A0",
+      "border": "#E5E5E2",
+      "glass": "rgba(255, 255, 255, 0.7)",
+      "glass_border": "rgba(255, 255, 255, 0.3)"
+    },
+    "dark": {
+      "background": "#000000",
+      "surface": "#121212",
+      "surface_secondary": "#1C1C1C",
+      "surface_tertiary": "#262626",
+      "primary": "#FF4500",
+      "text_primary": "#FAFAFA",
+      "text_secondary": "#A1A1A1",
+      "text_tertiary": "#666666",
+      "border": "#2C2C2C",
+      "glass": "rgba(0, 0, 0, 0.7)",
+      "glass_border": "rgba(255, 255, 255, 0.05)"
+    }
+  },
+  "typography": {
+    "headings": "Outfit",
+    "body": "Manrope",
+    "scales": {
+      "h1": {
+        "size": 36,
+        "weight": "900",
+        "tracking": -1,
+        "lineHeight": 40
+      },
+      "h2": {
+        "size": 28,
+        "weight": "700",
+        "tracking": -0.5,
+        "lineHeight": 34
+      },
+      "h3": {
+        "size": 24,
+        "weight": "600",
+        "tracking": -0.5,
+        "lineHeight": 30
+      },
+      "h4": {
+        "size": 20,
+        "weight": "600",
+        "tracking": 0,
+        "lineHeight": 26
+      },
+      "body_large": {
+        "size": 18,
+        "weight": "500",
+        "tracking": 0,
+        "lineHeight": 26
+      },
+      "body": {
+        "size": 16,
+        "weight": "400",
+        "tracking": 0.2,
+        "lineHeight": 24
+      },
+      "caption": {
+        "size": 12,
+        "weight": "600",
+        "tracking": 1.5,
+        "lineHeight": 16,
+        "textTransform": "uppercase"
+      }
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing Philosophy. Break out of standard 16px margins; use 24px to 32px for screen containers.",
+    "screen_padding": 24,
+    "item_gap": 16,
+    "section_gap": 32,
+    "border_radius": {
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24,
+      "2xl": 32,
+      "full": 9999
+    }
+  },
+  "components": {
+    "now_playing": {
+      "style": "Full screen modal/sheet. Dominant album art.",
+      "album_art": "Aspect ratio 1:1, full width minus 48px padding. Rounded-2xl (32px). Generates a soft diffuse shadow based on the artwork's dominant color.",
+      "background": "Translucent blurred background derived from the album art, or solid surface color if no art.",
+      "controls": "Generous spacing. Play/pause button is a massive circle (72x72) with primary color background. Seek bar uses primary color for progress and secondary for track.",
+      "typography": "Title is h2, artist is body_large in text_secondary."
+    },
+    "mini_player": {
+      "style": "Floating pill above bottom tab bar. Glassmorphism (backdrop-blur-xl).",
+      "layout": "Absolute bottom (above tabs), horizontal padding 16px. Height 64px.",
+      "album_art": "40x40 rounded-sm.",
+      "controls": "Play/Pause right-aligned. Touching anywhere else opens Now Playing.",
+      "radius": "full (9999px)"
+    },
+    "list_items": {
+      "style": "Optical alignment, large tap targets (min-height 72px).",
+      "album_art": "56x56 rounded-lg.",
+      "typography": "Title (body, 16px, font-semibold), Artist (caption, 13px, text_secondary).",
+      "action": "Right-aligned generic action icon (ellipsis or heart)."
+    },
+    "buttons": {
+      "primary": "bg-primary text-white rounded-full py-4 px-8 font-semibold tracking-wide. Height 56px.",
+      "secondary": "bg-surface_secondary text-text_primary rounded-full py-4 px-8 font-semibold. Height 56px.",
+      "icon": "48x48 min tap target."
+    },
+    "bottom_tabs": {
+      "style": "Glassmorphism background (Expo BlurView) to let list content scroll underneath smoothly. Removes standard border.",
+      "icons": "Minimal Phosphor Icons (duotone for active tabs, regular for inactive)."
+    },
+    "add_music_picker": {
+      "style": "Floating Action Button (FAB) or a massive outlined 'empty state' dashed card when no music exists.",
+      "fab": "Bottom right, bg-primary, rounded-full, 64x64, massive + icon."
+    }
+  },
+  "motion_and_interactions": {
+    "transitions": "Spring animations for gestures (Now Playing drag down). Smooth 0.3s ease for opacity/state changes.",
+    "hover_states": "N/A for mobile, focus on Tap/Press states. All pressable items must have an active opacity (0.7) or scale down (0.97) using React Native Reanimated or standard TouchableOpacity.",
+    "list_entrance": "Staggered fade-up for list items on initial load."
+  },
+  "icons": {
+    "library": "phosphor-react-native",
+    "style": "Phosphor Icons. Duotone weight for active states, Regular for inactive. Bold for media controls (play, pause, skip, seek)."
+  },
+  "image_urls": [
+    {
+      "url": "https://images.unsplash.com/photo-1608796804143-5f008ad7c030?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBndWl0YXIlMjBwaG90b2dyYXBoeXxlbnwwfHx8fDE3NzY5MDgzOTZ8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Default Album Art placeholder (Minimalist acoustic guitar, close up)",
+      "category": "default_album_art"
+    },
+    {
+      "url": "https://images.pexels.com/photos/36306703/pexels-photo-36306703.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Empty state illustration for Light Mode (Monochrome acoustic guitar)",
+      "category": "empty_state_light"
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1770745560263-a8fc696de90b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBkYXJrJTIwdGV4dHVyZXxlbnwwfHx8fDE3NzY5MDg0MjF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Empty state illustration for Dark Mode (Abstract dark flowing fabric)",
+      "category": "empty_state_dark"
+    }
+  ],
+  "accessibility": {
+    "contrast": "Ensure primary accent color (#FF4500) meets 4.5:1 ratio against surface.",
+    "touch_targets": "All interactive elements MUST have at least 48x48 points of hit area.",
+    "testing": "All interactive and key informational elements MUST include a `testID` attribute."
+  },
+  "instructions_to_main_agent": [
+    "Since this is a React Native Expo app, interpret these CSS/Tailwind-like philosophies into standard React Native StyleSheet, or use NativeWind if configured in the project.",
+    "For the Now Playing blurred background and bottom tabs, use `expo-blur`.",
+    "For icons, use `phosphor-react-native`.",
+    "Ensure animations (like Now Playing gestures, play/pause transitions) use React Native Reanimated.",
+    "Album art colors can be extracted using a suitable metadata library or color-thief (e.g. `react-native-image-colors`).",
+    "Follow the Light/Dark mode using React Native's `Appearance` module or standard theme contexts.",
+    "Do NOT use web-only components like Shadcn/UI directly. You must recreate these minimal visual primitives (cards, inputs, sheets) using React Native components.",
+    "Do NOT use `<img>` or web tags, use React Native `<Image>` and `<View>`.",
+    "For the Sleep timer, implement it as a minimalist bottom sheet (`@gorhom/bottom-sheet` is recommended)."
+  ]
+}
