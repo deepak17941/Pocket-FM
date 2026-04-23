@@ -77,10 +77,10 @@ export default function LibraryScreen() {
               testID="empty-add-button"
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#0A0A0A" />
               ) : (
                 <>
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <Ionicons name="add" size={20} color="#0A0A0A" />
                   <Text style={styles.primaryBtnText}>Add music</Text>
                 </>
               )}
@@ -112,7 +112,7 @@ export default function LibraryScreen() {
         activeOpacity={0.85}
         testID="fab-add-button"
       >
-        {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="add" size={30} color="#fff" />}
+        {loading ? <ActivityIndicator color="#0A0A0A" /> : <Ionicons name="add" size={30} color="#0A0A0A" />}
       </TouchableOpacity>
 
       {/* Track actions sheet */}
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, gap: 8,
   },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  primaryBtnText: { color: '#0A0A0A', fontWeight: '800', fontSize: 15 },
   fab: {
     position: 'absolute', right: spacing.lg,
     width: 60, height: 60, borderRadius: 30,

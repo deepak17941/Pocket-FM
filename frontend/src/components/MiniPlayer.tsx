@@ -50,7 +50,7 @@ export const MiniPlayer = ({ bottomOffset = 0 }: { bottomOffset?: number }) => {
             style={[styles.playBtn, { backgroundColor: c.primary }]}
             testID="mini-player-toggle"
           >
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
+            <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#0A0A0A" />
           </TouchableOpacity>
         </TouchableOpacity>
         <View style={[styles.progressTrack, { backgroundColor: c.border }]}>

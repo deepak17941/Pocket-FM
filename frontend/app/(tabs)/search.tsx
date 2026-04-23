@@ -202,10 +202,10 @@ export default function DiscoverScreen() {
             testID="url-add-btn"
           >
             {checkingUrl ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#0A0A0A" />
             ) : (
               <>
-                <Ionicons name="download-outline" size={20} color="#fff" />
+                <Ionicons name="download-outline" size={20} color="#0A0A0A" />
                 <Text style={styles.addUrlText}>Download to library</Text>
               </>
             )}
@@ -265,11 +265,11 @@ function ResultRow({ hit, c, downloading, added, onAdd }: any) {
         testID={`search-add-${hit.id}`}
       >
         {downloading ? (
-          <ActivityIndicator color="#fff" size="small" />
+          <ActivityIndicator color="#0A0A0A" size="small" />
         ) : added ? (
           <Ionicons name="checkmark" size={20} color={c.textPrimary} />
         ) : (
-          <Ionicons name="download-outline" size={20} color="#fff" />
+          <Ionicons name="download-outline" size={20} color="#0A0A0A" />
         )}
       </TouchableOpacity>
     </View>
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', gap: 8,
     paddingVertical: 14, borderRadius: radius.full,
   },
-  addUrlText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  addUrlText: { color: '#0A0A0A', fontWeight: '800', fontSize: 15 },
   disclaim: {
     marginTop: spacing.lg, flexDirection: 'row', gap: 8,
     padding: spacing.md, borderRadius: radius.md,

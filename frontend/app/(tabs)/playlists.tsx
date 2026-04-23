@@ -41,7 +41,7 @@ export default function PlaylistsScreen() {
           onPress={() => setCreating(true)}
           testID="create-playlist-button"
         >
-          <Ionicons name="add" size={22} color="#fff" />
+          <Ionicons name="add" size={22} color="#0A0A0A" />
         </TouchableOpacity>
       </View>
 
@@ -53,7 +53,7 @@ export default function PlaylistsScreen() {
           testID="playlists-empty"
           action={
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: c.primary }]} onPress={() => setCreating(true)} testID="empty-create-playlist">
-              <Ionicons name="add" size={20} color="#fff" />
+              <Ionicons name="add" size={20} color="#0A0A0A" />
               <Text style={styles.primaryBtnText}>Create playlist</Text>
             </TouchableOpacity>
           }
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, gap: 8,
   },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  primaryBtnText: { color: '#0A0A0A', fontWeight: '800', fontSize: 15 },
   secondaryBtn: { paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
   sheet: { padding: spacing.lg, borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth },

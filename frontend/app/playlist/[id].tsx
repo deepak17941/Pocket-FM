@@ -61,7 +61,7 @@ export default function PlaylistDetail() {
             onPress={playAll}
             testID="playlist-play-all"
           >
-            <Ionicons name="play" size={20} color="#fff" />
+            <Ionicons name="play" size={20} color="#0A0A0A" />
             <Text style={styles.playBtnText}>Play</Text>
           </TouchableOpacity>
         )}
@@ -107,5 +107,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999, marginTop: spacing.md,
   },
-  playBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  playBtnText: { color: '#0A0A0A', fontWeight: '800', fontSize: 15 },
 });
