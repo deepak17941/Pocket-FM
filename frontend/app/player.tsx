@@ -90,12 +90,7 @@ export default function PlayerScreen() {
           <Text style={[styles.eyebrow, { color: c.textTertiary }]}>PLAYING FROM LIBRARY</Text>
           <Text numberOfLines={1} style={[styles.topTrackName, { color: c.textPrimary }]}>{current.title}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.iconBtn, { backgroundColor: c.surfaceSecondary }]}
-          testID="player-more"
-        >
-          <Ionicons name="ellipsis-horizontal" size={22} color={c.textPrimary} />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Album art with soft color shadow */}
