@@ -7,19 +7,19 @@ import { AppThemeReactContext, AppThemeContextValue } from './AppThemeReactConte
 const KEY = '@pfm/bgColor';
 
 export const BG_SWATCHES = [
-  { id: 'auto', color: null, label: 'Auto' },
-  { id: 'black', color: '#000000', label: 'Black' },
-  { id: 'charcoal', color: '#1A1A1A', label: 'Charcoal' },
-  { id: 'eggplant', color: '#2A1A3A', label: 'Eggplant' },
-  { id: 'midnight', color: '#0B1E3A', label: 'Midnight' },
-  { id: 'forest', color: '#0D2E1F', label: 'Forest' },
-  { id: 'bordeaux', color: '#3A1020', label: 'Bordeaux' },
-  { id: 'slate', color: '#1F2937', label: 'Slate' },
-  { id: 'cream', color: '#F5F1E8', label: 'Cream' },
-  { id: 'blush', color: '#F7D9D3', label: 'Blush' },
-  { id: 'sky', color: '#CDE8FF', label: 'Sky' },
-  { id: 'mint', color: '#D6F2E0', label: 'Mint' },
-];
+  { id: 'auto',      color: null,      label: 'Auto',      icon: null },
+  { id: 'black',     color: '#000000', label: 'Black',     icon: 'Noir' },
+  { id: 'charcoal',  color: '#1A1A1A', label: 'Charcoal',  icon: 'Noir' },
+  { id: 'eggplant',  color: '#2A1A3A', label: 'Eggplant',  icon: 'Noir' },
+  { id: 'midnight',  color: '#0B1E3A', label: 'Midnight',  icon: 'Noir' },
+  { id: 'forest',    color: '#0D2E1F', label: 'Forest',    icon: 'Noir' },
+  { id: 'bordeaux',  color: '#3A1020', label: 'Bordeaux',  icon: 'Noir' },
+  { id: 'slate',     color: '#1F2937', label: 'Slate',     icon: 'Noir' },
+  { id: 'cream',     color: '#F5F1E8', label: 'Cream',     icon: 'Ivory' },
+  { id: 'blush',     color: '#F7D9D3', label: 'Blush',     icon: 'Ivory' },
+  { id: 'sky',       color: '#CDE8FF', label: 'Sky',       icon: 'Ivory' },
+  { id: 'mint',      color: '#D6F2E0', label: 'Mint',      icon: 'Ivory' },
+] as const;
 
 type Ctx = AppThemeContextValue;
 
@@ -106,6 +106,19 @@ export const AppThemeProvider = ({ children }: { children: React.ReactNode }) =>
   const setBgOverride = useCallback((color: string | null) => {
     setBgOverrideState(color);
     AsyncStorage.setItem(KEY, color === null ? 'null' : color).catch(() => {});
+    // Swap the iOS app icon to match the selected swatch family.
+    // Only runs on native; no-op on web.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { setAppIcon, getAppIcon } = require('expo-dynamic-app-icon');
+      const swatch = BG_SWATCHES.find((s) => (s.color ?? null) === color);
+      const targetIcon = swatch?.icon ?? null; // null = default (Neo lime)
+      if (getAppIcon() !== (targetIcon ?? 'DEFAULT')) {
+        setAppIcon(targetIcon);
+      }
+    } catch {
+      // web or module missing — ignore
+    }
   }, []);
 
   const theme = buildTheme(scheme === 'light' ? 'light' : 'dark', bgOverride);
