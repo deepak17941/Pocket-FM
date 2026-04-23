@@ -106,19 +106,6 @@ export const AppThemeProvider = ({ children }: { children: React.ReactNode }) =>
   const setBgOverride = useCallback((color: string | null) => {
     setBgOverrideState(color);
     AsyncStorage.setItem(KEY, color === null ? 'null' : color).catch(() => {});
-    // Swap the iOS app icon to match the selected swatch family.
-    // Only runs on native; no-op on web.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { setAppIcon, getAppIcon } = require('expo-dynamic-app-icon');
-      const swatch = BG_SWATCHES.find((s) => (s.color ?? null) === color);
-      const targetIcon = swatch?.icon ?? null; // null = default (Neo lime)
-      if (getAppIcon() !== (targetIcon ?? 'DEFAULT')) {
-        setAppIcon(targetIcon);
-      }
-    } catch {
-      // web or module missing — ignore
-    }
   }, []);
 
   const theme = buildTheme(scheme === 'light' ? 'light' : 'dark', bgOverride);

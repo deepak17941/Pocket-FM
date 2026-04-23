@@ -24,6 +24,8 @@ try {
       State: mod.State,
       RepeatMode: mod.RepeatMode,
       Event: mod.Event,
+      // also expose IOSCategory / IOSCategoryMode / IOSCategoryOptions if present
+      ...(mod as any),
     };
     tpHooks = {
       usePlaybackState: mod.usePlaybackState,
@@ -68,9 +70,18 @@ const ensureSetup = async () => {
   if (setupPromise) return setupPromise;
   setupPromise = (async () => {
     try {
-      await TP.setupPlayer({ autoHandleInterruptions: true });
+      const opts: any = { autoHandleInterruptions: true };
+      if (Platform.OS === 'ios') {
+        // IOSCategory.Playback → allows audio in silent mode + background
+        const IOSCategory = (RNTPEnums as any)?.IOSCategory;
+        if (IOSCategory?.Playback) opts.iosCategory = IOSCategory.Playback;
+      }
+      await TP.setupPlayer(opts);
     } catch (e: any) {
-      if (!String(e?.message || e).includes('already')) throw e;
+      if (!String(e?.message || e).includes('already')) {
+        console.warn('[TrackPlayer] setupPlayer failed:', e?.message ?? e);
+        throw e;
+      }
     }
     const Capability = RNTPEnums?.Capability;
     if (!Capability) return;
@@ -154,7 +165,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
       await TP.add(newQueue.map(toRNTP));
       if (startIdx > 0) await TP.skip(startIdx);
       await TP.play();
-    } catch (e) { /* swallow */ }
+    } catch (e: any) {
+      console.warn('[TrackPlayer] playTrack failed:', e?.message ?? e, e?.code, e?.stack);
+    }
   }, []);
 
   const togglePlay = useCallback(async () => {

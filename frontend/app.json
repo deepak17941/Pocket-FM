@@ -54,20 +54,7 @@
           "backgroundColor": "#000"
         }
       ],
-      "expo-asset",
-      [
-        "expo-dynamic-app-icon",
-        {
-          "Noir": {
-            "image": "./assets/images/icons/noir.png",
-            "prerendered": true
-          },
-          "Ivory": {
-            "image": "./assets/images/icons/ivory.png",
-            "prerendered": true
-          }
-        }
-      ]
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
