@@ -25,7 +25,7 @@ export default function PlayerScreen() {
     shuffle, toggleShuffle, repeat, cycleRepeat,
     sleepTimerRemaining, sleepEndOfTrack, setSleepTimer, setSleepEndOfTrack,
   } = usePlayer();
-  const { favorites, toggleFavorite, updateTrack } = useLibrary();
+  const { updateTrack } = useLibrary();
   const [seekBarWidth, setSeekBarWidth] = useState(SCREEN_W - spacing.lg * 2);
   const [genArtLoading, setGenArtLoading] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -55,7 +55,6 @@ export default function PlayerScreen() {
   }
 
   const progress = durationMs > 0 ? Math.min(1, positionMs / durationMs) : 0;
-  const isFav = favorites.includes(current.id);
   const artSize = Math.min(SCREEN_W - spacing.lg * 2, 360);
   const trackGlow = colorFromId(current.id);
 
@@ -116,19 +115,12 @@ export default function PlayerScreen() {
         />
       </View>
 
-      {/* Title + artist + favorite */}
+      {/* Title + artist */}
       <View style={styles.meta}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: c.textPrimary }]} numberOfLines={2}>{current.title}</Text>
           <Text style={[styles.artist, { color: c.textSecondary }]} numberOfLines={1}>{current.artist}</Text>
         </View>
-        <TouchableOpacity
-          onPress={() => toggleFavorite(current.id)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          testID="player-favorite"
-        >
-          <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={30} color={isFav ? c.primary : c.textSecondary} />
-        </TouchableOpacity>
       </View>
 
       {/* Sleep-timer chip — visible whenever a sleep mode is active */}
