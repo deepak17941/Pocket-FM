@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.pocketfm.app",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -18,6 +19,7 @@
       }
     },
     "android": {
+      "package": "com.pocketfm.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
