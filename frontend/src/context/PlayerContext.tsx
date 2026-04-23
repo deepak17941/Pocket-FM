@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { Track } from '../store/types';
+import { webPlayer } from '../audio/webPlayer';
 
 // On web, react-native-track-player has no native implementation.
-// Fall back to a stubbed player so the UI still works in the Expo web preview.
+// Fall back to an HTML5 <audio>-based player via webPlayer singleton.
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
+const IS_WEB = Platform.OS === 'web';
 
 type RNTPModule = typeof import('react-native-track-player');
 let TP: any = null; // TrackPlayer instance (.default export)
@@ -109,13 +111,35 @@ const toRNTP = (t: Track) => ({
   artwork: t.artwork || undefined,
 });
 
-// Safe hook wrappers — return sensible defaults on web.
-const useSafePlaybackState = () =>
-  tpHooks ? tpHooks.usePlaybackState() : { state: undefined };
-const useSafeProgress = () =>
-  tpHooks ? tpHooks.useProgress(500) : { position: 0, duration: 0 };
-const useSafeActiveTrack = () =>
-  tpHooks ? tpHooks.useActiveTrack() : null;
+// Safe hook wrappers — use webPlayer on web, RNTP hooks on native.
+const useSafePlaybackState = () => {
+  if (tpHooks) return tpHooks.usePlaybackState();
+  if (IS_WEB) {
+    const [, setTick] = useState(0);
+    useEffect(() => webPlayer.on(() => setTick((n) => n + 1)), []);
+    return { state: webPlayer.state.isPlaying ? 'web-playing' : 'web-paused' };
+  }
+  return { state: undefined };
+};
+const useSafeProgress = () => {
+  if (tpHooks) return tpHooks.useProgress(500);
+  if (IS_WEB) {
+    const [, setTick] = useState(0);
+    useEffect(() => webPlayer.on(() => setTick((n) => n + 1)), []);
+    const s = webPlayer.state;
+    return { position: s.position, duration: s.duration };
+  }
+  return { position: 0, duration: 0 };
+};
+const useSafeActiveTrack = () => {
+  if (tpHooks) return tpHooks.useActiveTrack();
+  if (IS_WEB) {
+    const [, setTick] = useState(0);
+    useEffect(() => webPlayer.on(() => setTick((n) => n + 1)), []);
+    return webPlayer.active;
+  }
+  return null;
+};
 
 export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [current, setCurrent] = useState<Track | null>(null);
@@ -132,7 +156,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const activeTrack = useSafeActiveTrack();
 
   const PlayingState = RNTPEnums?.State?.Playing;
-  const isPlaying = !!PlayingState && playbackState?.state === PlayingState;
+  const isPlaying = IS_WEB
+    ? (playbackState?.state === 'web-playing')
+    : (!!PlayingState && playbackState?.state === PlayingState);
   const positionMs = Math.floor((progress?.position ?? 0) * 1000);
   const durationMs = Math.floor((progress?.duration ?? current?.duration ?? 0) * 1000);
 
@@ -158,6 +184,13 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     const startIdx = Math.max(0, newQueue.findIndex((t) => t.id === track.id));
     setQueue(newQueue);
     setCurrent(track);
+    if (IS_WEB) {
+      try {
+        await webPlayer.setQueue(newQueue, startIdx);
+        await webPlayer.play();
+      } catch (e) { console.warn('[WebPlayer] playTrack failed', e); }
+      return;
+    }
     if (!TP) return;
     try {
       await ensureSetup();
@@ -171,6 +204,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const togglePlay = useCallback(async () => {
+    if (IS_WEB) {
+      if (isPlaying) await webPlayer.pause();
+      else await webPlayer.play();
+      return;
+    }
     if (!TP) return;
     try {
       await ensureSetup();
@@ -180,11 +218,23 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   }, [isPlaying]);
 
   const seekTo = useCallback(async (ms: number) => {
+    if (IS_WEB) { await webPlayer.seekTo(ms / 1000); return; }
     if (!TP) return;
     try { await TP.seekTo(ms / 1000); } catch {}
   }, []);
 
   const next = useCallback(async () => {
+    if (IS_WEB) {
+      if (shuffle && queue.length > 1) {
+        const currentIdx = queue.findIndex((t) => t.id === current?.id);
+        let nextIdx: number;
+        do { nextIdx = Math.floor(Math.random() * queue.length); } while (nextIdx === currentIdx);
+        await webPlayer.skip(nextIdx);
+      } else {
+        await webPlayer.skipToNext();
+      }
+      return;
+    }
     if (!TP) return;
     try {
       if (shuffle && queue.length > 1) {
@@ -199,6 +249,11 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   }, [shuffle, queue, current]);
 
   const previous = useCallback(async () => {
+    if (IS_WEB) {
+      if (positionMs > 3000) { await webPlayer.seekTo(0); return; }
+      await webPlayer.skipToPrevious();
+      return;
+    }
     if (!TP) return;
     try {
       if (positionMs > 3000) { await TP.seekTo(0); return; }
@@ -207,7 +262,9 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   }, [positionMs]);
 
   const stop = useCallback(async () => {
-    if (TP) {
+    if (IS_WEB) {
+      await webPlayer.stop();
+    } else if (TP) {
       try { await TP.stop(); await TP.reset(); } catch {}
     }
     setCurrent(null);
@@ -228,7 +285,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
         sleepIntervalRef.current = null;
         setSleepTimerMs(null); setSleepTimerRemaining(null);
-        TP?.pause?.().catch?.(() => {});
+        if (IS_WEB) webPlayer.pause().catch(() => {});
+        else TP?.pause?.().catch?.(() => {});
       } else {
         setSleepTimerRemaining(remaining);
       }
