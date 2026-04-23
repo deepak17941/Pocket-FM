@@ -17,6 +17,7 @@ type Ctx = {
   deletePlaylist: (id: string) => void;
   addTrackToPlaylist: (playlistId: string, trackId: string) => void;
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void;
+  updateTrack: (id: string, patch: Partial<Track>) => void;
   getTrackById: (id: string) => Track | undefined;
   ready: boolean;
 };
@@ -115,12 +116,21 @@ export const LibraryProvider = ({ children }: { children: React.ReactNode }) => 
 
   const getTrackById = useCallback((id: string) => tracks.find(t => t.id === id), [tracks]);
 
+  const updateTrack = useCallback((id: string, patch: Partial<Track>) => {
+    setTracks(prev => {
+      const next = prev.map(t => (t.id === id ? { ...t, ...patch } : t));
+      saveTracks(next);
+      return next;
+    });
+  }, []);
+
   return (
     <LibraryContext.Provider value={{
       tracks, playlists, favorites,
       addTracks, removeTrack, toggleFavorite,
       createPlaylist, deletePlaylist,
       addTrackToPlaylist, removeTrackFromPlaylist,
+      updateTrack,
       getTrackById, ready,
     }}>
       {children}

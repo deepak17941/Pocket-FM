@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, httpx
+import os, logging, httpx, base64
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -41,6 +41,16 @@ class UrlCheckResponse(BaseModel):
     content_type: str = ""
 
 
+class GenerateArtRequest(BaseModel):
+    title: str
+    artist: Optional[str] = ""
+    mood: Optional[str] = ""
+
+
+class GenerateArtResponse(BaseModel):
+    data_uri: str  # "data:image/jpeg;base64,..."
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Pocket FM API"}
@@ -55,7 +65,6 @@ def _artwork(track: dict) -> Optional[str]:
 
 @api_router.get("/search", response_model=List[SearchHit])
 async def search(q: str = Query(..., min_length=1), limit: int = 20):
-    """Search Audius catalogue for full-length streamable tracks."""
     if limit < 1 or limit > 50:
         limit = 20
     url = f"{AUDIUS_HOST}/v1/tracks/search"
@@ -92,15 +101,12 @@ async def search(q: str = Query(..., min_length=1), limit: int = 20):
 
 @api_router.get("/url-check", response_model=UrlCheckResponse)
 async def url_check(url: str = Query(..., min_length=5)):
-    """Validate a user-pasted direct audio URL before letting the client download it."""
     if not (url.startswith("http://") or url.startswith("https://")):
         raise HTTPException(status_code=400, detail="URL must start with http(s)://")
     try:
         async with httpx.AsyncClient(timeout=12, follow_redirects=True) as c:
-            # HEAD first
             resp = await c.head(url)
             if resp.status_code >= 400:
-                # Some servers don't support HEAD — fall back to a ranged GET
                 resp = await c.get(url, headers={"Range": "bytes=0-1024"})
                 resp.raise_for_status()
     except Exception as e:
@@ -111,7 +117,6 @@ async def url_check(url: str = Query(..., min_length=5)):
     if "audio" not in ctype and not url.lower().split("?")[0].rsplit(".", 1)[-1] in ("mp3", "m4a", "aac", "ogg", "wav", "flac"):
         raise HTTPException(status_code=415, detail=f"URL is not audio (content-type: {ctype or 'unknown'})")
 
-    # derive a readable title from filename
     fname = url.split("?")[0].rsplit("/", 1)[-1] or "Audio"
     base = fname.rsplit(".", 1)[0].replace("_", " ").replace("+", " ")
     title, artist = base, "Unknown"
@@ -128,6 +133,43 @@ async def url_check(url: str = Query(..., min_length=5)):
         size=size,
         content_type=ctype,
     )
+
+
+@api_router.post("/generate-art", response_model=GenerateArtResponse)
+async def generate_art(req: GenerateArtRequest):
+    """Generate a beautiful AI-designed album cover for a track using Gemini Nano Banana."""
+    key = os.getenv("EMERGENT_LLM_KEY")
+    if not key:
+        raise HTTPException(status_code=503, detail="Art generation unavailable")
+
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    mood_part = f" The mood/vibe should feel: {req.mood}." if req.mood else ""
+    artist_part = f" by {req.artist}" if req.artist and req.artist.lower() != "unknown" else ""
+    prompt = (
+        f"A stunning, modern, artistic album cover design for the song \"{req.title}\"{artist_part}."
+        f"{mood_part}"
+        " Abstract, minimalist yet expressive — think contemporary vinyl artwork, award-winning album-cover design."
+        " Bold composition, rich color palette, single strong focal element."
+        " No text, no letters, no words, no watermarks, no logos."
+        " Square 1024x1024, photorealistic or painterly (art director's choice), premium quality, crisp, clean edges."
+    )
+
+    try:
+        chat = LlmChat(api_key=key, session_id=f"art_{req.title[:30]}", system_message="You generate beautiful album cover art.")
+        chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+        _text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Art generation failed: {e}")
+
+    if not images:
+        raise HTTPException(status_code=502, detail="No image returned")
+    img = images[0]
+    mime = img.get("mime_type") or "image/jpeg"
+    data = img.get("data") or ""
+    if not data:
+        raise HTTPException(status_code=502, detail="Empty image data")
+    return GenerateArtResponse(data_uri=f"data:{mime};base64,{data}")
 
 
 app.include_router(api_router)

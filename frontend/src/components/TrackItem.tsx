@@ -23,7 +23,7 @@ export const TrackItem = ({ track, onPress, onMore, isPlaying, isFavorite }: Pro
       style={[styles.row, { backgroundColor: 'transparent' }]}
       testID={`track-item-${track.id}`}
     >
-      <AlbumArt id={track.id} title={track.title} size={56} radius={radius.md} />
+      <AlbumArt id={track.id} title={track.title} size={56} radius={radius.md} artwork={track.artwork} />
       <View style={styles.meta}>
         <Text numberOfLines={1} style={[styles.title, { color: isPlaying ? c.primary : c.textPrimary }]}>
           {track.title}

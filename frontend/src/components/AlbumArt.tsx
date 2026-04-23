@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colorFromId } from '../utils/format';
 
@@ -10,9 +10,23 @@ type Props = {
   radius: number;
   style?: ViewStyle;
   iconSize?: number;
+  artwork?: string;
 };
 
-export const AlbumArt = ({ id, title, size, radius, style, iconSize }: Props) => {
+export const AlbumArt = ({ id, title, size, radius, style, iconSize, artwork }: Props) => {
+  if (artwork) {
+    return (
+      <Image
+        source={{ uri: artwork }}
+        style={[
+          { width: size, height: size, borderRadius: radius, backgroundColor: '#222' },
+          style,
+        ]}
+        testID={`album-art-${id}`}
+      />
+    );
+  }
+
   const base = colorFromId(id);
   const letter = (title || '?').trim().charAt(0).toUpperCase() || '♪';
   return (
@@ -45,12 +59,6 @@ export const AlbumArt = ({ id, title, size, radius, style, iconSize }: Props) =>
 };
 
 const styles = StyleSheet.create({
-  overlayTop: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    bottom: '50%',
-  },
-  overlayBottom: {
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    top: '50%',
-  },
+  overlayTop: { backgroundColor: 'rgba(255,255,255,0.12)', bottom: '50%' },
+  overlayBottom: { backgroundColor: 'rgba(0,0,0,0.18)', top: '50%' },
 });

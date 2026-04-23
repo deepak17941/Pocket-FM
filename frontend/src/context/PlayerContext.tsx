@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync, AudioPlayer } from 'expo-audio';
+import TrackPlayer, {
+  Capability, RepeatMode, State, Event,
+  useProgress, usePlaybackState, useActiveTrack,
+} from 'react-native-track-player';
 import { Track } from '../store/types';
 
 type Ctx = {
@@ -8,12 +11,12 @@ type Ctx = {
   isPlaying: boolean;
   positionMs: number;
   durationMs: number;
-  playTrack: (track: Track, queue?: Track[]) => void;
-  togglePlay: () => void;
-  seekTo: (ms: number) => void;
-  next: () => void;
-  previous: () => void;
-  stop: () => void;
+  playTrack: (track: Track, queue?: Track[]) => Promise<void>;
+  togglePlay: () => Promise<void>;
+  seekTo: (ms: number) => Promise<void>;
+  next: () => Promise<void>;
+  previous: () => Promise<void>;
+  stop: () => Promise<void>;
   sleepTimerMs: number | null;
   setSleepTimer: (minutes: number | null) => void;
   sleepTimerRemaining: number | null;
@@ -25,158 +28,153 @@ type Ctx = {
 
 const PlayerContext = createContext<Ctx | null>(null);
 
+let setupPromise: Promise<void> | null = null;
+const ensureSetup = async () => {
+  if (setupPromise) return setupPromise;
+  setupPromise = (async () => {
+    try {
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: true,
+        maxCacheSize: 1024 * 10, // 10MB buffer
+      });
+    } catch (e: any) {
+      // "already initialized" — ignore
+      if (!String(e?.message || e).includes('already')) throw e;
+    }
+    await TrackPlayer.updateOptions({
+      capabilities: [
+        Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious,
+        Capability.Stop, Capability.SeekTo, Capability.JumpBackward, Capability.JumpForward,
+      ],
+      compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious],
+      notificationCapabilities: [
+        Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious, Capability.Stop,
+      ],
+      progressUpdateEventInterval: 2,
+    });
+  })();
+  return setupPromise;
+};
+
+const toRNTP = (t: Track) => ({
+  id: t.id,
+  url: t.uri,
+  title: t.title || 'Untitled',
+  artist: t.artist || 'Unknown',
+  duration: t.duration || 0,
+  artwork: t.artwork || undefined,
+});
+
 export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [current, setCurrent] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
-  const [queueIndex, setQueueIndex] = useState(0);
   const [sleepTimerMs, setSleepTimerMs] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const sleepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const player: AudioPlayer = useAudioPlayer(current ? { uri: current.uri } : null);
-  const status = useAudioPlayerStatus(player);
+  const playbackState = usePlaybackState();
+  const progress = useProgress(500);
+  const activeTrack = useActiveTrack();
 
+  const isPlaying = playbackState?.state === State.Playing;
+  const positionMs = Math.floor((progress?.position ?? 0) * 1000);
+  const durationMs = Math.floor((progress?.duration ?? current?.duration ?? 0) * 1000);
+
+  // Setup on mount
+  useEffect(() => { ensureSetup().catch(() => {}); }, []);
+
+  // Sync local `current` with RNTP's active track
   useEffect(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-      shouldRouteThroughEarpiece: false,
-    }).catch(() => {});
-  }, []);
-
-  const isPlaying = status?.playing ?? false;
-  const positionMs = Math.floor((status?.currentTime ?? 0) * 1000);
-  const durationMs = Math.floor((status?.duration ?? current?.duration ?? 0) * 1000);
-
-  const playTrack = useCallback((track: Track, q?: Track[]) => {
-    const newQueue = q && q.length > 0 ? q : [track];
-    const idx = newQueue.findIndex(t => t.id === track.id);
-    setQueue(newQueue);
-    setQueueIndex(idx >= 0 ? idx : 0);
-    setCurrent(track);
-  }, []);
-
-  // Autoplay + bind lock-screen controls when a new track is loaded
-  useEffect(() => {
-    if (current && player) {
-      try {
-        // @ts-ignore — setActiveForLockScreen is available on native expo-audio 1.1.1
-        player.setActiveForLockScreen?.(true, {
-          title: current.title,
-          artist: current.artist,
-          albumTitle: 'Pocket FM',
-        });
-      } catch {}
-      try { player.play(); } catch {}
+    if (!activeTrack) return;
+    if (current?.id !== activeTrack.id) {
+      const match = queue.find((t) => t.id === activeTrack.id);
+      if (match) setCurrent(match);
     }
-  }, [current, player]);
+  }, [activeTrack, current, queue]);
 
-  const togglePlay = useCallback(() => {
-    if (!player) return;
-    if (isPlaying) player.pause();
-    else player.play();
-  }, [player, isPlaying]);
+  // Apply RNTP repeat mode
+  useEffect(() => {
+    const mode = repeat === 'off' ? RepeatMode.Off : repeat === 'all' ? RepeatMode.Queue : RepeatMode.Track;
+    TrackPlayer.setRepeatMode(mode).catch(() => {});
+  }, [repeat]);
 
-  const seekTo = useCallback((ms: number) => {
-    if (!player) return;
-    player.seekTo(ms / 1000);
-  }, [player]);
+  const playTrack = useCallback(async (track: Track, q?: Track[]) => {
+    await ensureSetup();
+    const newQueue = q && q.length > 0 ? q : [track];
+    const startIdx = Math.max(0, newQueue.findIndex((t) => t.id === track.id));
+    const rntpTracks = newQueue.map(toRNTP);
+    await TrackPlayer.reset();
+    await TrackPlayer.add(rntpTracks);
+    if (startIdx > 0) await TrackPlayer.skip(startIdx);
+    setQueue(newQueue);
+    setCurrent(track);
+    await TrackPlayer.play();
+  }, []);
 
-  const next = useCallback(() => {
-    if (queue.length === 0) return;
-    let nextIdx: number;
+  const togglePlay = useCallback(async () => {
+    await ensureSetup();
+    if (isPlaying) await TrackPlayer.pause();
+    else await TrackPlayer.play();
+  }, [isPlaying]);
+
+  const seekTo = useCallback(async (ms: number) => {
+    await TrackPlayer.seekTo(ms / 1000);
+  }, []);
+
+  const next = useCallback(async () => {
     if (shuffle && queue.length > 1) {
+      const currentIdx = queue.findIndex((t) => t.id === current?.id);
+      let nextIdx: number;
       do {
         nextIdx = Math.floor(Math.random() * queue.length);
-      } while (nextIdx === queueIndex);
+      } while (nextIdx === currentIdx);
+      try { await TrackPlayer.skip(nextIdx); } catch {}
     } else {
-      nextIdx = (queueIndex + 1) % queue.length;
+      try { await TrackPlayer.skipToNext(); } catch {}
     }
-    setQueueIndex(nextIdx);
-    setCurrent(queue[nextIdx]);
-  }, [queue, queueIndex, shuffle]);
+  }, [shuffle, queue, current]);
 
-  const previous = useCallback(() => {
-    if (!player) return;
-    if (positionMs > 3000) {
-      player.seekTo(0);
-      return;
-    }
-    if (queue.length === 0) return;
-    const prevIdx = (queueIndex - 1 + queue.length) % queue.length;
-    setQueueIndex(prevIdx);
-    setCurrent(queue[prevIdx]);
-  }, [queue, queueIndex, player, positionMs]);
+  const previous = useCallback(async () => {
+    if (positionMs > 3000) { await TrackPlayer.seekTo(0); return; }
+    try { await TrackPlayer.skipToPrevious(); } catch {}
+  }, [positionMs]);
 
-  const stop = useCallback(() => {
-    if (player) {
-      try { player.pause(); } catch {}
-      try {
-        // @ts-ignore — clear lock-screen controls
-        player.clearLockScreenControls?.();
-      } catch {}
-    }
+  const stop = useCallback(async () => {
+    try { await TrackPlayer.stop(); await TrackPlayer.reset(); } catch {}
     setCurrent(null);
     setQueue([]);
-    setQueueIndex(0);
-  }, [player]);
-
-  // Auto-advance on track end (respect repeat mode)
-  const endHandledRef = useRef(false);
-  useEffect(() => {
-    if (!status) return;
-    if (status.didJustFinish && !endHandledRef.current) {
-      endHandledRef.current = true;
-      setTimeout(() => { endHandledRef.current = false; }, 500);
-      if (repeat === 'one') {
-        try { player?.seekTo(0); player?.play(); } catch {}
-      } else if (repeat === 'off' && queue.length > 0 && queueIndex === queue.length - 1 && !shuffle) {
-        // End of queue, stop
-        try { player?.pause(); } catch {}
-      } else {
-        next();
-      }
-    }
-  }, [status, next, repeat, queue, queueIndex, shuffle, player]);
-
-  const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
-  const cycleRepeat = useCallback(() => {
-    setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'));
   }, []);
 
   // Sleep timer
   const setSleepTimer = useCallback((minutes: number | null) => {
-    if (sleepIntervalRef.current) {
-      clearInterval(sleepIntervalRef.current);
-      sleepIntervalRef.current = null;
-    }
+    if (sleepIntervalRef.current) { clearInterval(sleepIntervalRef.current); sleepIntervalRef.current = null; }
     if (minutes === null || minutes <= 0) {
-      setSleepTimerMs(null);
-      setSleepTimerRemaining(null);
-      return;
+      setSleepTimerMs(null); setSleepTimerRemaining(null); return;
     }
     const endAt = Date.now() + minutes * 60 * 1000;
-    setSleepTimerMs(endAt);
-    setSleepTimerRemaining(endAt - Date.now());
+    setSleepTimerMs(endAt); setSleepTimerRemaining(endAt - Date.now());
     sleepIntervalRef.current = setInterval(() => {
       const remaining = endAt - Date.now();
       if (remaining <= 0) {
         if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
         sleepIntervalRef.current = null;
-        setSleepTimerMs(null);
-        setSleepTimerRemaining(null);
-        try { player?.pause(); } catch {}
+        setSleepTimerMs(null); setSleepTimerRemaining(null);
+        TrackPlayer.pause().catch(() => {});
       } else {
         setSleepTimerRemaining(remaining);
       }
     }, 1000);
-  }, [player]);
+  }, []);
 
   useEffect(() => () => {
     if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+  }, []);
+
+  const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
+  const cycleRepeat = useCallback(() => {
+    setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'));
   }, []);
 
   return (

@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions, Pressable, Animated, Easing,
+  ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { useTheme, spacing, radius } from '../src/theme/theme';
 import { usePlayer } from '../src/context/PlayerContext';
 import { useLibrary } from '../src/context/LibraryContext';
 import { AlbumArt } from '../src/components/AlbumArt';
 import { formatMs, colorFromId } from '../src/utils/format';
+import { generateAiArt } from '../src/utils/online';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -20,8 +24,11 @@ export default function PlayerScreen() {
     current, isPlaying, togglePlay, seekTo, next, previous, positionMs, durationMs,
     shuffle, toggleShuffle, repeat, cycleRepeat,
   } = usePlayer();
-  const { favorites, toggleFavorite } = useLibrary();
+  const { favorites, toggleFavorite, updateTrack } = useLibrary();
   const [seekBarWidth, setSeekBarWidth] = useState(SCREEN_W - spacing.lg * 2);
+  const [genArtLoading, setGenArtLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const shareRef = useRef<ViewShot>(null);
   const pulse = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -109,6 +116,7 @@ export default function PlayerScreen() {
           size={artSize}
           radius={radius.xl}
           iconSize={artSize * 0.3}
+          artwork={current.artwork}
         />
       </View>
 
@@ -127,6 +135,115 @@ export default function PlayerScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Secondary action row — AI art + Share */}
+      <View style={styles.secondaryRow}>
+        <TouchableOpacity
+          onPress={async () => {
+            if (!current || genArtLoading) return;
+            setGenArtLoading(true);
+            try {
+              const artPath = await generateAiArt(current.id, current.title, current.artist);
+              updateTrack(current.id, { artwork: artPath });
+            } catch (e: any) {
+              Alert.alert('AI Art failed', e?.message ?? 'Please try again.');
+            } finally {
+              setGenArtLoading(false);
+            }
+          }}
+          style={[styles.pillBtn, { backgroundColor: c.surfaceSecondary }]}
+          disabled={genArtLoading}
+          testID="player-ai-art"
+        >
+          {genArtLoading ? (
+            <ActivityIndicator color={c.textPrimary} size="small" />
+          ) : (
+            <Ionicons name="sparkles" size={16} color={c.primary} />
+          )}
+          <Text style={[styles.pillText, { color: c.textPrimary }]}>
+            {genArtLoading ? 'Generating…' : 'AI Cover Art'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={async () => {
+            if (!current || sharing) return;
+            setSharing(true);
+            try {
+              const uri = await shareRef.current?.capture?.();
+              if (!uri) throw new Error('Could not capture share card');
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, { dialogTitle: 'Share to Instagram Story', mimeType: 'image/png' });
+              } else {
+                Alert.alert('Sharing unavailable on this device');
+              }
+            } catch (e: any) {
+              Alert.alert('Share failed', e?.message ?? 'Please try again.');
+            } finally {
+              setSharing(false);
+            }
+          }}
+          style={[styles.pillBtn, { backgroundColor: c.surfaceSecondary }]}
+          disabled={sharing}
+          testID="player-share"
+        >
+          {sharing ? (
+            <ActivityIndicator color={c.textPrimary} size="small" />
+          ) : (
+            <Ionicons name="share-social" size={16} color={c.primary} />
+          )}
+          <Text style={[styles.pillText, { color: c.textPrimary }]}>
+            {sharing ? 'Preparing…' : 'Share Story'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Hidden share card — captured off-screen */}
+      <View style={{ position: 'absolute', left: -9999, top: 0 }} pointerEvents="none">
+        <ViewShot ref={shareRef} options={{ format: 'png', quality: 0.95, width: 1080, height: 1920 }}>
+          <View style={[shareStyles.card, { backgroundColor: trackGlow }]}>
+            <View style={shareStyles.inner}>
+              <View style={[shareStyles.artFrame, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
+                {current.artwork ? (
+                  <Image source={{ uri: current.artwork }} style={shareStyles.art} />
+                ) : (
+                  <View style={[shareStyles.art, { backgroundColor: colorFromId(current.id), alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: '#fff', fontSize: 220, fontWeight: '900' }}>
+                      {(current.title || '?').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={shareStyles.eyebrow}>NOW PLAYING</Text>
+              <Text style={shareStyles.title} numberOfLines={3}>{current.title}</Text>
+              <Text style={shareStyles.artist} numberOfLines={1}>{current.artist}</Text>
+              <View style={shareStyles.wave}>
+                {Array.from({ length: 30 }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      width: 8,
+                      height: 20 + ((i * 13) % 80),
+                      backgroundColor: '#fff',
+                      borderRadius: 4,
+                      opacity: 0.85,
+                    }}
+                  />
+                ))}
+              </View>
+              <View style={shareStyles.brand}>
+                <View style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: '#D0FF3E', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ flexDirection: 'row', gap: 4 }}>
+                    <View style={{ width: 6, height: 18, backgroundColor: '#0A0A0A', borderRadius: 3 }} />
+                    <View style={{ width: 6, height: 28, backgroundColor: '#0A0A0A', borderRadius: 3 }} />
+                    <View style={{ width: 6, height: 14, backgroundColor: '#0A0A0A', borderRadius: 3 }} />
+                  </View>
+                </View>
+                <Text style={shareStyles.brandText}>POCKET FM</Text>
+              </View>
+            </View>
+          </View>
+        </ViewShot>
+      </View>
       {/* Seek bar */}
       <View style={styles.seekWrap}>
         <Pressable
@@ -298,4 +415,43 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -2, right: 6,
     fontSize: 10, fontWeight: '900',
   },
+  secondaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  pillBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999,
+  },
+  pillText: { fontSize: 13, fontWeight: '700' },
+});
+
+const shareStyles = StyleSheet.create({
+  card: { width: 1080, height: 1920, padding: 96 },
+  inner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  artFrame: {
+    width: 760, height: 760, borderRadius: 48,
+    padding: 24, marginBottom: 60,
+  },
+  art: { flex: 1, borderRadius: 32 },
+  eyebrow: { fontSize: 32, fontWeight: '800', color: 'rgba(255,255,255,0.75)', letterSpacing: 8, marginTop: 40 },
+  title: { fontSize: 96, fontWeight: '900', color: '#fff', letterSpacing: -3, textAlign: 'center', marginTop: 16, lineHeight: 104 },
+  artist: { fontSize: 44, fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginTop: 16 },
+  wave: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 80,
+    height: 100,
+  },
+  brand: {
+    position: 'absolute',
+    bottom: 0,
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+  },
+  brandText: { color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 4 },
 });

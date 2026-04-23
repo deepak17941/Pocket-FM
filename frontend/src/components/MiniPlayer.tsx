@@ -39,7 +39,7 @@ export const MiniPlayer = ({ bottomOffset = 0 }: { bottomOffset?: number }) => {
           onPress={() => router.push('/player')}
           testID="mini-player"
         >
-          <AlbumArt id={current.id} title={current.title} size={40} radius={radius.sm} />
+          <AlbumArt id={current.id} title={current.title} size={40} radius={radius.sm} artwork={current.artwork} />
           <View style={styles.meta}>
             <Text numberOfLines={1} style={[styles.title, { color: c.textPrimary }]}>{current.title}</Text>
             <Text numberOfLines={1} style={[styles.artist, { color: c.textSecondary }]}>{current.artist}</Text>
