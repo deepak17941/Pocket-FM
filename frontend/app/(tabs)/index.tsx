@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, Modal, Pressable } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, spacing, radius } from '../../src/theme/theme';
@@ -10,6 +11,16 @@ import { usePlayer } from '../../src/context/PlayerContext';
 import { pickAudioFiles } from '../../src/utils/picker';
 import { Track } from '../../src/store/types';
 
+type SortKey = 'recent' | 'oldest' | 'titleAsc' | 'titleDesc' | 'artistAsc';
+const SORT_OPTIONS: { key: SortKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'recent',    label: 'Recently added',   icon: 'time-outline' },
+  { key: 'oldest',    label: 'Oldest first',     icon: 'hourglass-outline' },
+  { key: 'titleAsc',  label: 'Title · A to Z',   icon: 'arrow-down-outline' },
+  { key: 'titleDesc', label: 'Title · Z to A',   icon: 'arrow-up-outline' },
+  { key: 'artistAsc', label: 'Artist · A to Z',  icon: 'person-outline' },
+];
+const SORT_KEY = '@pfm/librarySort';
+
 export default function LibraryScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
@@ -18,6 +29,20 @@ export default function LibraryScreen() {
   const [loading, setLoading] = useState(false);
   const [menuTrack, setMenuTrack] = useState<Track | null>(null);
   const [plPickerFor, setPlPickerFor] = useState<Track | null>(null);
+  const [sort, setSort] = useState<SortKey>('recent');
+  const [sortPickerOpen, setSortPickerOpen] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(SORT_KEY).then((v) => {
+      if (v && SORT_OPTIONS.some((o) => o.key === v)) setSort(v as SortKey);
+    });
+  }, []);
+
+  const pickSort = (k: SortKey) => {
+    setSort(k);
+    AsyncStorage.setItem(SORT_KEY, k).catch(() => {});
+    setSortPickerOpen(false);
+  };
 
   const handleAdd = async () => {
     try {
@@ -39,7 +64,18 @@ export default function LibraryScreen() {
     ]);
   };
 
-  const sorted = [...tracks].sort((a, b) => b.addedAt - a.addedAt);
+  const sorted = [...tracks].sort((a, b) => {
+    switch (sort) {
+      case 'oldest':    return a.addedAt - b.addedAt;
+      case 'titleAsc':  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+      case 'titleDesc': return b.title.localeCompare(a.title, undefined, { sensitivity: 'base' });
+      case 'artistAsc': return a.artist.localeCompare(b.artist, undefined, { sensitivity: 'base' })
+                               || a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+      case 'recent':
+      default:          return b.addedAt - a.addedAt;
+    }
+  });
+  const currentSort = SORT_OPTIONS.find((o) => o.key === sort) ?? SORT_OPTIONS[0];
 
   return (
     <View style={[styles.root, { backgroundColor: c.background, paddingTop: insets.top }]}>
@@ -58,9 +94,20 @@ export default function LibraryScreen() {
       </View>
 
       {tracks.length > 0 && (
-        <Text style={[styles.countText, { color: c.textSecondary }]}>
-          {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
-        </Text>
+        <View style={styles.sortRow}>
+          <Text style={[styles.countText, { color: c.textSecondary }]}>
+            {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
+          </Text>
+          <TouchableOpacity
+            style={[styles.sortBtn, { backgroundColor: c.surfaceSecondary, borderColor: c.border }]}
+            onPress={() => setSortPickerOpen(true)}
+            testID="library-sort-btn"
+          >
+            <Ionicons name={currentSort.icon} size={14} color={c.textPrimary} />
+            <Text style={[styles.sortBtnText, { color: c.textPrimary }]} numberOfLines={1}>{currentSort.label}</Text>
+            <Ionicons name="chevron-down" size={14} color={c.textSecondary} />
+          </TouchableOpacity>
+        </View>
       )}
 
       {sorted.length === 0 ? (
@@ -138,6 +185,34 @@ export default function LibraryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Sort picker sheet */}
+      <Modal visible={sortPickerOpen} transparent animationType="fade" onRequestClose={() => setSortPickerOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setSortPickerOpen(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.border }]} onPress={() => {}}>
+            <Text style={[styles.sheetTitle, { color: c.textPrimary }]}>Sort by</Text>
+            {SORT_OPTIONS.map((opt) => {
+              const selected = opt.key === sort;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={styles.sheetBtn}
+                  onPress={() => pickSort(opt.key)}
+                  testID={`sort-option-${opt.key}`}
+                >
+                  <Ionicons name={opt.icon} size={22} color={selected ? c.primary : c.textPrimary} />
+                  <View style={{ flex: 1, marginLeft: 14 }}>
+                    <Text style={{ color: selected ? c.primary : c.textPrimary, fontSize: 16, fontWeight: selected ? '800' : '600' }}>
+                      {opt.label}
+                    </Text>
+                  </View>
+                  {selected && <Ionicons name="checkmark" size={22} color={c.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -171,7 +246,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  countText: { paddingHorizontal: spacing.lg, fontSize: 12, fontWeight: '600', letterSpacing: 1, marginBottom: spacing.xs, textTransform: 'uppercase' },
+  countText: { fontSize: 12, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  sortRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
+  },
+  sortBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth, maxWidth: 200,
+  },
+  sortBtnText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, gap: 8,
