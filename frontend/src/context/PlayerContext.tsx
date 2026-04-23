@@ -1,9 +1,34 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import TrackPlayer, {
-  Capability, RepeatMode, State, Event,
-  useProgress, usePlaybackState, useActiveTrack,
-} from 'react-native-track-player';
+import { Platform } from 'react-native';
 import { Track } from '../store/types';
+
+// On web, react-native-track-player has no native implementation.
+// Fall back to a stubbed player so the UI still works in the Expo web preview.
+const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
+
+type RNTP = typeof import('react-native-track-player');
+let TP: RNTP | null = null;
+let tpHooks: {
+  usePlaybackState: () => any;
+  useProgress: (ms?: number) => any;
+  useActiveTrack: () => any;
+} | null = null;
+try {
+  if (IS_NATIVE) {
+    // Lazy require so web doesn't crash at import time.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod: RNTP = require('react-native-track-player');
+    TP = mod;
+    tpHooks = {
+      usePlaybackState: mod.usePlaybackState,
+      useProgress: mod.useProgress,
+      useActiveTrack: mod.useActiveTrack,
+    };
+  }
+} catch {
+  TP = null;
+  tpHooks = null;
+}
 
 type Ctx = {
   current: Track | null;
@@ -30,18 +55,16 @@ const PlayerContext = createContext<Ctx | null>(null);
 
 let setupPromise: Promise<void> | null = null;
 const ensureSetup = async () => {
+  if (!TP) return;
   if (setupPromise) return setupPromise;
   setupPromise = (async () => {
     try {
-      await TrackPlayer.setupPlayer({
-        autoHandleInterruptions: true,
-        maxCacheSize: 1024 * 10, // 10MB buffer
-      });
+      await TP!.setupPlayer({ autoHandleInterruptions: true });
     } catch (e: any) {
-      // "already initialized" — ignore
       if (!String(e?.message || e).includes('already')) throw e;
     }
-    await TrackPlayer.updateOptions({
+    const { Capability } = TP!;
+    await TP!.updateOptions({
       capabilities: [
         Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious,
         Capability.Stop, Capability.SeekTo, Capability.JumpBackward, Capability.JumpForward,
@@ -65,6 +88,14 @@ const toRNTP = (t: Track) => ({
   artwork: t.artwork || undefined,
 });
 
+// Safe hook wrappers — return sensible defaults on web.
+const useSafePlaybackState = () =>
+  tpHooks ? tpHooks.usePlaybackState() : { state: undefined };
+const useSafeProgress = () =>
+  tpHooks ? tpHooks.useProgress(500) : { position: 0, duration: 0 };
+const useSafeActiveTrack = () =>
+  tpHooks ? tpHooks.useActiveTrack() : null;
+
 export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [current, setCurrent] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
@@ -74,18 +105,17 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const sleepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const playbackState = usePlaybackState();
-  const progress = useProgress(500);
-  const activeTrack = useActiveTrack();
+  const playbackState = useSafePlaybackState();
+  const progress = useSafeProgress();
+  const activeTrack = useSafeActiveTrack();
 
-  const isPlaying = playbackState?.state === State.Playing;
+  const PlayingState = TP?.State?.Playing;
+  const isPlaying = !!PlayingState && playbackState?.state === PlayingState;
   const positionMs = Math.floor((progress?.position ?? 0) * 1000);
   const durationMs = Math.floor((progress?.duration ?? current?.duration ?? 0) * 1000);
 
-  // Setup on mount
   useEffect(() => { ensureSetup().catch(() => {}); }, []);
 
-  // Sync local `current` with RNTP's active track
   useEffect(() => {
     if (!activeTrack) return;
     if (current?.id !== activeTrack.id) {
@@ -94,60 +124,72 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [activeTrack, current, queue]);
 
-  // Apply RNTP repeat mode
   useEffect(() => {
+    if (!TP) return;
+    const { RepeatMode } = TP;
     const mode = repeat === 'off' ? RepeatMode.Off : repeat === 'all' ? RepeatMode.Queue : RepeatMode.Track;
-    TrackPlayer.setRepeatMode(mode).catch(() => {});
+    TP.setRepeatMode(mode).catch(() => {});
   }, [repeat]);
 
   const playTrack = useCallback(async (track: Track, q?: Track[]) => {
-    await ensureSetup();
     const newQueue = q && q.length > 0 ? q : [track];
     const startIdx = Math.max(0, newQueue.findIndex((t) => t.id === track.id));
-    const rntpTracks = newQueue.map(toRNTP);
-    await TrackPlayer.reset();
-    await TrackPlayer.add(rntpTracks);
-    if (startIdx > 0) await TrackPlayer.skip(startIdx);
     setQueue(newQueue);
     setCurrent(track);
-    await TrackPlayer.play();
+    if (!TP) return;
+    try {
+      await ensureSetup();
+      await TP.reset();
+      await TP.add(newQueue.map(toRNTP));
+      if (startIdx > 0) await TP.skip(startIdx);
+      await TP.play();
+    } catch (e) { /* swallow */ }
   }, []);
 
   const togglePlay = useCallback(async () => {
-    await ensureSetup();
-    if (isPlaying) await TrackPlayer.pause();
-    else await TrackPlayer.play();
+    if (!TP) return;
+    try {
+      await ensureSetup();
+      if (isPlaying) await TP.pause();
+      else await TP.play();
+    } catch {}
   }, [isPlaying]);
 
   const seekTo = useCallback(async (ms: number) => {
-    await TrackPlayer.seekTo(ms / 1000);
+    if (!TP) return;
+    try { await TP.seekTo(ms / 1000); } catch {}
   }, []);
 
   const next = useCallback(async () => {
-    if (shuffle && queue.length > 1) {
-      const currentIdx = queue.findIndex((t) => t.id === current?.id);
-      let nextIdx: number;
-      do {
-        nextIdx = Math.floor(Math.random() * queue.length);
-      } while (nextIdx === currentIdx);
-      try { await TrackPlayer.skip(nextIdx); } catch {}
-    } else {
-      try { await TrackPlayer.skipToNext(); } catch {}
-    }
+    if (!TP) return;
+    try {
+      if (shuffle && queue.length > 1) {
+        const currentIdx = queue.findIndex((t) => t.id === current?.id);
+        let nextIdx: number;
+        do { nextIdx = Math.floor(Math.random() * queue.length); } while (nextIdx === currentIdx);
+        await TP.skip(nextIdx);
+      } else {
+        await TP.skipToNext();
+      }
+    } catch {}
   }, [shuffle, queue, current]);
 
   const previous = useCallback(async () => {
-    if (positionMs > 3000) { await TrackPlayer.seekTo(0); return; }
-    try { await TrackPlayer.skipToPrevious(); } catch {}
+    if (!TP) return;
+    try {
+      if (positionMs > 3000) { await TP.seekTo(0); return; }
+      await TP.skipToPrevious();
+    } catch {}
   }, [positionMs]);
 
   const stop = useCallback(async () => {
-    try { await TrackPlayer.stop(); await TrackPlayer.reset(); } catch {}
+    if (TP) {
+      try { await TP.stop(); await TP.reset(); } catch {}
+    }
     setCurrent(null);
     setQueue([]);
   }, []);
 
-  // Sleep timer
   const setSleepTimer = useCallback((minutes: number | null) => {
     if (sleepIntervalRef.current) { clearInterval(sleepIntervalRef.current); sleepIntervalRef.current = null; }
     if (minutes === null || minutes <= 0) {
@@ -161,7 +203,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
         if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
         sleepIntervalRef.current = null;
         setSleepTimerMs(null); setSleepTimerRemaining(null);
-        TrackPlayer.pause().catch(() => {});
+        TP?.pause?.().catch?.(() => {});
       } else {
         setSleepTimerRemaining(remaining);
       }
