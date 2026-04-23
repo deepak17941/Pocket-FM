@@ -58,6 +58,7 @@ export default function DiscoverScreen() {
       addTracks([track]);
       Alert.alert('Added', `"${hit.title}" saved to your library.`);
     } catch (e: any) {
+      console.warn('[Discover] download failed:', e);
       Alert.alert('Download failed', e?.message ?? 'Unable to download.');
     } finally {
       setDownloading((prev) => {

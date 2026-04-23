@@ -1,11 +1,15 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { createAudioPlayer } from 'expo-audio';
+import { Platform } from 'react-native';
 import { Track } from '../store/types';
 
-const MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
-const ART_DIR = `${FileSystem.documentDirectory}art/`;
+const IS_WEB = Platform.OS === 'web';
+
+const MUSIC_DIR = IS_WEB ? '' : `${FileSystem.documentDirectory}music/`;
+const ART_DIR = IS_WEB ? '' : `${FileSystem.documentDirectory}art/`;
 
 const ensureDirs = async () => {
+  if (IS_WEB) return;
   for (const dir of [MUSIC_DIR, ART_DIR]) {
     const info = await FileSystem.getInfoAsync(dir);
     if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
@@ -72,6 +76,20 @@ export const checkUrl = async (audioUrl: string): Promise<UrlCheck> => {
 export const downloadToLibrary = async (hit: SearchHit): Promise<Track> => {
   await ensureDirs();
   const id = `tr_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+  // On web, we can't write to disk — just use the remote URL directly for streaming.
+  if (IS_WEB) {
+    return {
+      id,
+      title: hit.title,
+      artist: hit.creator,
+      uri: hit.audio_url,
+      duration: hit.duration || 0,
+      addedAt: Date.now(),
+      artwork: hit.artwork_url ?? undefined,
+    };
+  }
+
   const urlLower = hit.audio_url.toLowerCase().split('?')[0];
   let ext = 'mp3';
   for (const e of ['mp3', 'm4a', 'aac', 'ogg', 'wav', 'flac']) {
@@ -122,6 +140,10 @@ export const generateAiArt = async (trackId: string, title: string, artist: stri
   // data_uri like "data:image/jpeg;base64,...."
   const m = /^data:(image\/\w+);base64,(.+)$/.exec(data_uri);
   if (!m) throw new Error('Malformed art response');
+
+  // On web we can't write to disk — return the data URI directly (<Image> handles data URIs fine).
+  if (IS_WEB) return data_uri;
+
   const ext = m[1].split('/')[1] || 'jpeg';
   const b64 = m[2];
   const destPath = `${ART_DIR}${trackId}_ai_${Date.now()}.${ext}`;
