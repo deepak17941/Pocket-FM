@@ -6,8 +6,9 @@ import { Track } from '../store/types';
 // Fall back to a stubbed player so the UI still works in the Expo web preview.
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 
-type RNTP = typeof import('react-native-track-player');
-let TP: RNTP | null = null;
+type RNTPModule = typeof import('react-native-track-player');
+let TP: any = null; // TrackPlayer instance (.default export)
+let RNTPEnums: { Capability: any; State: any; RepeatMode: any; Event: any } | null = null;
 let tpHooks: {
   usePlaybackState: () => any;
   useProgress: (ms?: number) => any;
@@ -15,10 +16,15 @@ let tpHooks: {
 } | null = null;
 try {
   if (IS_NATIVE) {
-    // Lazy require so web doesn't crash at import time.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod: RNTP = require('react-native-track-player');
-    TP = mod;
+    const mod: RNTPModule = require('react-native-track-player');
+    TP = (mod as any).default ?? mod;
+    RNTPEnums = {
+      Capability: mod.Capability,
+      State: mod.State,
+      RepeatMode: mod.RepeatMode,
+      Event: mod.Event,
+    };
     tpHooks = {
       usePlaybackState: mod.usePlaybackState,
       useProgress: mod.useProgress,
@@ -27,6 +33,7 @@ try {
   }
 } catch {
   TP = null;
+  RNTPEnums = null;
   tpHooks = null;
 }
 
@@ -61,12 +68,13 @@ const ensureSetup = async () => {
   if (setupPromise) return setupPromise;
   setupPromise = (async () => {
     try {
-      await TP!.setupPlayer({ autoHandleInterruptions: true });
+      await TP.setupPlayer({ autoHandleInterruptions: true });
     } catch (e: any) {
       if (!String(e?.message || e).includes('already')) throw e;
     }
-    const { Capability } = TP!;
-    await TP!.updateOptions({
+    const Capability = RNTPEnums?.Capability;
+    if (!Capability) return;
+    await TP.updateOptions({
       capabilities: [
         Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious,
         Capability.Stop, Capability.SeekTo, Capability.JumpBackward, Capability.JumpForward,
@@ -112,7 +120,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const progress = useSafeProgress();
   const activeTrack = useSafeActiveTrack();
 
-  const PlayingState = TP?.State?.Playing;
+  const PlayingState = RNTPEnums?.State?.Playing;
   const isPlaying = !!PlayingState && playbackState?.state === PlayingState;
   const positionMs = Math.floor((progress?.position ?? 0) * 1000);
   const durationMs = Math.floor((progress?.duration ?? current?.duration ?? 0) * 1000);
@@ -128,8 +136,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   }, [activeTrack, current, queue]);
 
   useEffect(() => {
-    if (!TP) return;
-    const { RepeatMode } = TP;
+    if (!TP || !RNTPEnums) return;
+    const { RepeatMode } = RNTPEnums;
     const mode = repeat === 'off' ? RepeatMode.Off : repeat === 'all' ? RepeatMode.Queue : RepeatMode.Track;
     TP.setRepeatMode(mode).catch(() => {});
   }, [repeat]);
@@ -234,9 +242,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Listen for RNTP track-changed event to pause if sleepEndOfTrack was set
   useEffect(() => {
-    if (!TP || !sleepEndOfTrack) return;
-    const sub = TP.addEventListener(TP.Event.PlaybackActiveTrackChanged, () => {
-      // When active track changes (auto-advance), sleep-end-of-track kicks in
+    if (!TP || !RNTPEnums || !sleepEndOfTrack) return;
+    const sub = TP.addEventListener(RNTPEnums.Event.PlaybackActiveTrackChanged, () => {
       TP.pause().catch(() => {});
       setSleepEndOfTrackState(false);
     });
