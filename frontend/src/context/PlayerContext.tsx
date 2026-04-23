@@ -17,6 +17,10 @@ type Ctx = {
   sleepTimerMs: number | null;
   setSleepTimer: (minutes: number | null) => void;
   sleepTimerRemaining: number | null;
+  shuffle: boolean;
+  toggleShuffle: () => void;
+  repeat: 'off' | 'all' | 'one';
+  cycleRepeat: () => void;
 };
 
 const PlayerContext = createContext<Ctx | null>(null);
@@ -27,6 +31,8 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [queueIndex, setQueueIndex] = useState(0);
   const [sleepTimerMs, setSleepTimerMs] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const sleepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const player: AudioPlayer = useAudioPlayer(current ? { uri: current.uri } : null);
@@ -81,10 +87,17 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
 
   const next = useCallback(() => {
     if (queue.length === 0) return;
-    const nextIdx = (queueIndex + 1) % queue.length;
+    let nextIdx: number;
+    if (shuffle && queue.length > 1) {
+      do {
+        nextIdx = Math.floor(Math.random() * queue.length);
+      } while (nextIdx === queueIndex);
+    } else {
+      nextIdx = (queueIndex + 1) % queue.length;
+    }
     setQueueIndex(nextIdx);
     setCurrent(queue[nextIdx]);
-  }, [queue, queueIndex]);
+  }, [queue, queueIndex, shuffle]);
 
   const previous = useCallback(() => {
     if (!player) return;
@@ -111,16 +124,28 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     setQueueIndex(0);
   }, [player]);
 
-  // Auto-advance on track end
+  // Auto-advance on track end (respect repeat mode)
   const endHandledRef = useRef(false);
   useEffect(() => {
     if (!status) return;
     if (status.didJustFinish && !endHandledRef.current) {
       endHandledRef.current = true;
       setTimeout(() => { endHandledRef.current = false; }, 500);
-      next();
+      if (repeat === 'one') {
+        try { player?.seekTo(0); player?.play(); } catch {}
+      } else if (repeat === 'off' && queue.length > 0 && queueIndex === queue.length - 1 && !shuffle) {
+        // End of queue, stop
+        try { player?.pause(); } catch {}
+      } else {
+        next();
+      }
     }
-  }, [status, next]);
+  }, [status, next, repeat, queue, queueIndex, shuffle, player]);
+
+  const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
+  const cycleRepeat = useCallback(() => {
+    setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'));
+  }, []);
 
   // Sleep timer
   const setSleepTimer = useCallback((minutes: number | null) => {
@@ -159,6 +184,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
       current, queue, isPlaying, positionMs, durationMs,
       playTrack, togglePlay, seekTo, next, previous, stop,
       sleepTimerMs, setSleepTimer, sleepTimerRemaining,
+      shuffle, toggleShuffle, repeat, cycleRepeat,
     }}>
       {children}
     </PlayerContext.Provider>
