@@ -33,21 +33,52 @@ export type SearchHit = {
   creator: string;
   audio_url: string;
   duration: number;
+  artwork_url?: string | null;
+  plays?: number;
+};
+
+export type UrlCheck = {
+  ok: boolean;
+  title: string;
+  artist: string;
+  audio_url: string;
+  duration: number;
+  size: number;
+  content_type: string;
 };
 
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export const searchOnline = async (query: string): Promise<SearchHit[]> => {
-  const url = `${BACKEND}/api/search?q=${encodeURIComponent(query)}&limit=15`;
+  const url = `${BACKEND}/api/search?q=${encodeURIComponent(query)}&limit=20`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Search failed (${res.status})`);
   return res.json();
 };
 
+export const checkUrl = async (audioUrl: string): Promise<UrlCheck> => {
+  const url = `${BACKEND}/api/url-check?url=${encodeURIComponent(audioUrl)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    let msg = `URL check failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.detail) msg = j.detail;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+};
+
+/** Download a SearchHit (Audius / URL) to local storage and return a Track. */
 export const downloadToLibrary = async (hit: SearchHit): Promise<Track> => {
   await ensureDir();
   const id = `tr_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-  const ext = hit.audio_url.toLowerCase().endsWith('.ogg') ? 'ogg' : 'mp3';
+  const urlLower = hit.audio_url.toLowerCase().split('?')[0];
+  let ext = 'mp3';
+  for (const e of ['mp3', 'm4a', 'aac', 'ogg', 'wav', 'flac']) {
+    if (urlLower.endsWith('.' + e)) { ext = e; break; }
+  }
   const destUri = `${MUSIC_DIR}${id}.${ext}`;
 
   const dl = FileSystem.createDownloadResumable(hit.audio_url, destUri);

@@ -1,5 +1,4 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -18,7 +17,8 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-IA_BASE = "https://archive.org"
+AUDIUS_HOST = "https://discoveryprovider.audius.co"
+APP_NAME = "pocketfm"
 
 
 class SearchHit(BaseModel):
@@ -27,6 +27,18 @@ class SearchHit(BaseModel):
     creator: str
     audio_url: str
     duration: float = 0.0
+    artwork_url: Optional[str] = None
+    plays: int = 0
+
+
+class UrlCheckResponse(BaseModel):
+    ok: bool
+    title: str
+    artist: str
+    audio_url: str
+    duration: float = 0.0
+    size: int = 0
+    content_type: str = ""
 
 
 @api_router.get("/")
@@ -34,90 +46,88 @@ async def root():
     return {"message": "Pocket FM API"}
 
 
-async def _best_audio_file(identifier: str) -> Optional[dict]:
-    """Pick the best streamable audio file (mp3 preferred) for an IA item."""
-    url = f"{IA_BASE}/metadata/{identifier}"
-    async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url)
-        if r.status_code != 200:
-            return None
-        data = r.json()
-    files = data.get("files", []) or []
-    mp3s = [f for f in files if str(f.get("name", "")).lower().endswith(".mp3")]
-    ogg = [f for f in files if str(f.get("name", "")).lower().endswith(".ogg")]
-    candidates = mp3s or ogg
-    if not candidates:
-        return None
-    # Prefer the "derivative" MP3s (VBR/128kbps) for smaller size
-    def score(f):
-        n = str(f.get("name", "")).lower()
-        s = 0
-        if "vbr" in n: s += 3
-        if "128" in n: s += 2
-        if "64" in n: s += 1
-        return s
-    candidates.sort(key=score, reverse=True)
-    return candidates[0]
+def _artwork(track: dict) -> Optional[str]:
+    art = track.get("artwork") or {}
+    if isinstance(art, dict):
+        return art.get("480x480") or art.get("1000x1000") or art.get("150x150")
+    return None
 
 
 @api_router.get("/search", response_model=List[SearchHit])
-async def search(q: str = Query(..., min_length=1), limit: int = 15):
-    """Search Internet Archive audio collection for tracks matching q."""
+async def search(q: str = Query(..., min_length=1), limit: int = 20):
+    """Search Audius catalogue for full-length streamable tracks."""
     if limit < 1 or limit > 50:
-        limit = 15
-    query = f'({q}) AND mediatype:(audio)'
-    params = {
-        "q": query,
-        "fl[]": ["identifier", "title", "creator"],
-        "sort[]": "downloads desc",
-        "rows": limit,
-        "page": 1,
-        "output": "json",
-    }
+        limit = 20
+    url = f"{AUDIUS_HOST}/v1/tracks/search"
+    params = {"query": q, "app_name": APP_NAME, "limit": limit}
     try:
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.get(f"{IA_BASE}/advancedsearch.php", params=params)
+        async with httpx.AsyncClient(timeout=12) as c:
+            r = await c.get(url, params=params)
             r.raise_for_status()
             data = r.json()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Search failed: {e}")
 
-    docs = data.get("response", {}).get("docs", []) or []
-    hits: List[SearchHit] = []
-    # Process items concurrently-ish, cap to first N for speed
-    for d in docs[:limit]:
-        ident = d.get("identifier")
-        if not ident:
+    out: List[SearchHit] = []
+    for t in data.get("data", []) or []:
+        if t.get("is_delete") or not t.get("is_streamable", True):
             continue
-        best = await _best_audio_file(ident)
-        if not best:
+        tid = t.get("id")
+        if not tid:
             continue
-        fname = best.get("name")
-        audio_url = f"{IA_BASE}/download/{ident}/{fname}"
-        dur_raw = best.get("length") or "0"
-        # length can be "MM:SS" or seconds string
-        dur = 0.0
-        try:
-            if ":" in str(dur_raw):
-                parts = [float(x) for x in str(dur_raw).split(":")]
-                while len(parts) < 3: parts.insert(0, 0)
-                dur = parts[0] * 3600 + parts[1] * 60 + parts[2]
-            else:
-                dur = float(dur_raw)
-        except Exception:
-            dur = 0.0
-        title = d.get("title") or best.get("title") or ident
-        creator = d.get("creator") or "Unknown"
-        if isinstance(creator, list): creator = ", ".join(creator)
-        if isinstance(title, list): title = title[0] if title else ident
-        hits.append(SearchHit(
-            id=f"ia_{ident}",
-            title=str(title)[:200],
-            creator=str(creator)[:200],
-            audio_url=audio_url,
-            duration=dur,
+        user = t.get("user") or {}
+        artist = user.get("name") or user.get("handle") or "Unknown"
+        stream_url = f"{AUDIUS_HOST}/v1/tracks/{tid}/stream?app_name={APP_NAME}"
+        out.append(SearchHit(
+            id=f"au_{tid}",
+            title=str(t.get("title") or "Untitled")[:200],
+            creator=str(artist)[:200],
+            audio_url=stream_url,
+            duration=float(t.get("duration") or 0),
+            artwork_url=_artwork(t),
+            plays=int(t.get("play_count") or 0),
         ))
-    return hits
+    return out
+
+
+@api_router.get("/url-check", response_model=UrlCheckResponse)
+async def url_check(url: str = Query(..., min_length=5)):
+    """Validate a user-pasted direct audio URL before letting the client download it."""
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="URL must start with http(s)://")
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as c:
+            # HEAD first
+            resp = await c.head(url)
+            if resp.status_code >= 400:
+                # Some servers don't support HEAD — fall back to a ranged GET
+                resp = await c.get(url, headers={"Range": "bytes=0-1024"})
+                resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"URL not reachable: {e}")
+
+    ctype = (resp.headers.get("content-type") or "").lower()
+    size = int(resp.headers.get("content-length") or 0)
+    if "audio" not in ctype and not url.lower().split("?")[0].rsplit(".", 1)[-1] in ("mp3", "m4a", "aac", "ogg", "wav", "flac"):
+        raise HTTPException(status_code=415, detail=f"URL is not audio (content-type: {ctype or 'unknown'})")
+
+    # derive a readable title from filename
+    fname = url.split("?")[0].rsplit("/", 1)[-1] or "Audio"
+    base = fname.rsplit(".", 1)[0].replace("_", " ").replace("+", " ")
+    title, artist = base, "Unknown"
+    if " - " in base:
+        a, t = base.split(" - ", 1)
+        artist, title = a.strip(), t.strip()
+
+    return UrlCheckResponse(
+        ok=True,
+        title=title[:200] or "Audio",
+        artist=artist[:200] or "Unknown",
+        audio_url=url,
+        duration=0.0,
+        size=size,
+        content_type=ctype,
+    )
 
 
 app.include_router(api_router)
