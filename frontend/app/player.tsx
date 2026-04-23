@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   playBtn: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#FF4500', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#7C5CFF', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
 });

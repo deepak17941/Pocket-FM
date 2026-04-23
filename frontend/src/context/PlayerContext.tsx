@@ -36,6 +36,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
       shouldRouteThroughEarpiece: false,
     }).catch(() => {});
   }, []);
@@ -52,9 +53,17 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     setCurrent(track);
   }, []);
 
-  // Autoplay when new track loaded
+  // Autoplay + bind lock-screen controls when a new track is loaded
   useEffect(() => {
     if (current && player) {
+      try {
+        // @ts-ignore — setActiveForLockScreen is available on native expo-audio 1.1.1
+        player.setActiveForLockScreen?.(true, {
+          title: current.title,
+          artist: current.artist,
+          albumTitle: 'Pocket FM',
+        });
+      } catch {}
       try { player.play(); } catch {}
     }
   }, [current, player]);
@@ -92,6 +101,10 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const stop = useCallback(() => {
     if (player) {
       try { player.pause(); } catch {}
+      try {
+        // @ts-ignore — clear lock-screen controls
+        player.clearLockScreenControls?.();
+      } catch {}
     }
     setCurrent(null);
     setQueue([]);
