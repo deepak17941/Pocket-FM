@@ -45,6 +45,8 @@ type Ctx = {
   sleepTimerMs: number | null;
   setSleepTimer: (minutes: number | null) => void;
   sleepTimerRemaining: number | null;
+  sleepEndOfTrack: boolean;
+  setSleepEndOfTrack: (enabled: boolean) => void;
   shuffle: boolean;
   toggleShuffle: () => void;
   repeat: 'off' | 'all' | 'one';
@@ -103,6 +105,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
+  const [sleepEndOfTrack, setSleepEndOfTrackState] = useState(false);
   const sleepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const playbackState = useSafePlaybackState();
@@ -196,6 +199,7 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
       setSleepTimerMs(null); setSleepTimerRemaining(null); return;
     }
     const endAt = Date.now() + minutes * 60 * 1000;
+    setSleepEndOfTrackState(false); // mutually exclusive with end-of-track
     setSleepTimerMs(endAt); setSleepTimerRemaining(endAt - Date.now());
     sleepIntervalRef.current = setInterval(() => {
       const remaining = endAt - Date.now();
@@ -219,11 +223,32 @@ export const PlayerProvider = ({ children }: { children: React.ReactNode }) => {
     setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'));
   }, []);
 
+  const setSleepEndOfTrack = useCallback((enabled: boolean) => {
+    if (enabled && sleepIntervalRef.current) {
+      clearInterval(sleepIntervalRef.current);
+      sleepIntervalRef.current = null;
+      setSleepTimerMs(null); setSleepTimerRemaining(null);
+    }
+    setSleepEndOfTrackState(enabled);
+  }, []);
+
+  // Listen for RNTP track-changed event to pause if sleepEndOfTrack was set
+  useEffect(() => {
+    if (!TP || !sleepEndOfTrack) return;
+    const sub = TP.addEventListener(TP.Event.PlaybackActiveTrackChanged, () => {
+      // When active track changes (auto-advance), sleep-end-of-track kicks in
+      TP.pause().catch(() => {});
+      setSleepEndOfTrackState(false);
+    });
+    return () => sub.remove();
+  }, [sleepEndOfTrack]);
+
   return (
     <PlayerContext.Provider value={{
       current, queue, isPlaying, positionMs, durationMs,
       playTrack, togglePlay, seekTo, next, previous, stop,
       sleepTimerMs, setSleepTimer, sleepTimerRemaining,
+      sleepEndOfTrack, setSleepEndOfTrack,
       shuffle, toggleShuffle, repeat, cycleRepeat,
     }}>
       {children}

@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme, View } from 'react-native';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { PlayerProvider } from '../src/context/PlayerContext';
+import { AppThemeProvider } from '../src/theme/AppThemeContext';
 import { palette } from '../src/theme/theme';
 
 export default function RootLayout() {
@@ -14,30 +15,32 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
       <SafeAreaProvider>
-        <LibraryProvider>
-          <PlayerProvider>
-            <View style={{ flex: 1, backgroundColor: c.background }}>
-              <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: c.background },
-                }}
-              >
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen
-                  name="player"
-                  options={{
-                    presentation: 'modal',
-                    animation: 'slide_from_bottom',
-                    gestureEnabled: true,
+        <AppThemeProvider>
+          <LibraryProvider>
+            <PlayerProvider>
+              <View style={{ flex: 1, backgroundColor: c.background }}>
+                <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: c.background },
                   }}
-                />
-                <Stack.Screen name="playlist/[id]" />
-              </Stack>
-            </View>
-          </PlayerProvider>
-        </LibraryProvider>
+                >
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen
+                    name="player"
+                    options={{
+                      presentation: 'modal',
+                      animation: 'slide_from_bottom',
+                      gestureEnabled: true,
+                    }}
+                  />
+                  <Stack.Screen name="playlist/[id]" />
+                </Stack>
+              </View>
+            </PlayerProvider>
+          </LibraryProvider>
+        </AppThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

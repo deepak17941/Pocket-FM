@@ -1,4 +1,6 @@
 import { useColorScheme } from 'react-native';
+import { useContext } from 'react';
+import { AppThemeReactContext } from './AppThemeReactContext';
 
 export const palette = {
   light: {
@@ -33,8 +35,11 @@ export const palette = {
 
 export type ThemeColors = typeof palette.dark;
 
+/** Reads AppThemeContext if wrapped, otherwise falls back to system scheme. */
 export const useTheme = (): ThemeColors => {
   const scheme = useColorScheme();
+  const ctx = useContext(AppThemeReactContext);
+  if (ctx?.theme) return ctx.theme;
   return scheme === 'light' ? palette.light : palette.dark;
 };
 
@@ -55,3 +60,4 @@ export const radius = {
   xxl: 32,
   full: 9999,
 };
+

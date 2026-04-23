@@ -23,6 +23,7 @@ export default function PlayerScreen() {
   const {
     current, isPlaying, togglePlay, seekTo, next, previous, positionMs, durationMs,
     shuffle, toggleShuffle, repeat, cycleRepeat,
+    sleepTimerRemaining, sleepEndOfTrack, setSleepTimer, setSleepEndOfTrack,
   } = usePlayer();
   const { favorites, toggleFavorite, updateTrack } = useLibrary();
   const [seekBarWidth, setSeekBarWidth] = useState(SCREEN_W - spacing.lg * 2);
@@ -134,6 +135,29 @@ export default function PlayerScreen() {
           <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={30} color={isFav ? c.primary : c.textSecondary} />
         </TouchableOpacity>
       </View>
+
+      {/* Sleep-timer chip — visible whenever a sleep mode is active */}
+      {(sleepTimerRemaining !== null || sleepEndOfTrack) && (
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              'Sleep Timer',
+              sleepEndOfTrack ? 'Playback will pause when this track ends.' : `Playback pauses in ${formatMs(sleepTimerRemaining ?? 0)}.`,
+              [
+                { text: 'Cancel timer', style: 'destructive', onPress: () => { setSleepTimer(null); setSleepEndOfTrack(false); } },
+                { text: 'Keep', style: 'cancel' },
+              ]
+            );
+          }}
+          style={[styles.sleepChip, { backgroundColor: c.primary }]}
+          testID="player-sleep-chip"
+        >
+          <Ionicons name="moon" size={13} color="#0A0A0A" />
+          <Text style={styles.sleepChipText}>
+            {sleepEndOfTrack ? 'Sleep: end of track' : `Sleep in ${formatMs(sleepTimerRemaining ?? 0)}`}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Secondary action row — AI art + Share */}
       <View style={styles.secondaryRow}>
@@ -427,6 +451,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999,
   },
   pillText: { fontSize: 13, fontWeight: '700' },
+  sleepChip: {
+    alignSelf: 'center',
+    marginTop: spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+  },
+  sleepChipText: { color: '#0A0A0A', fontWeight: '800', fontSize: 12, letterSpacing: 0.2 },
 });
 
 const shareStyles = StyleSheet.create({
